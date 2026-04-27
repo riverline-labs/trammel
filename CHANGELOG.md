@@ -5,7 +5,7 @@ follows [keep-a-changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.1.0] – TBD
+## [0.1.0] – 2026-04-27
 
 ### Added
 - Initial release. Two crates: `trammel` (lib + bin) and `trammel-attrs`
