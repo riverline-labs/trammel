@@ -7,11 +7,15 @@
 //! [`CompiledRules`] precompiles each rule entry's `in_files` glob list into
 //! a [`GlobSet`] once per `run()` so the per-file loop never recompiles.
 
+pub mod file_content_scan;
 pub mod forbidden_imports;
 pub mod forbidden_inline_paths;
 pub mod forbidden_macros;
 pub mod forbidden_methods;
+pub mod fs_layout;
+pub mod n_plus_one;
 pub mod path_string;
+pub mod required_struct_attrs;
 pub mod use_tree;
 
 use anyhow::Result;
@@ -27,6 +31,7 @@ pub struct CompiledRules {
     pub forbidden_inline_paths: Vec<GlobSet>,
     pub forbidden_macros: Vec<GlobSet>,
     pub forbidden_methods: Vec<GlobSet>,
+    pub required_struct_attrs: Vec<GlobSet>,
 }
 
 impl CompiledRules {
@@ -38,6 +43,9 @@ impl CompiledRules {
             )?,
             forbidden_macros: build_each(cfg.forbidden_macros.iter().map(|r| &r.in_files))?,
             forbidden_methods: build_each(cfg.forbidden_methods.iter().map(|r| &r.in_files))?,
+            required_struct_attrs: build_each(
+                cfg.required_struct_attrs.iter().map(|r| &r.in_files),
+            )?,
         })
     }
 }

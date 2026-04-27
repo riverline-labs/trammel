@@ -146,12 +146,19 @@ impl<'ast, 'a, 'v> Visit<'ast> for Visitor<'a, 'v> {
     }
 
     fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
+        rules::required_struct_attrs::check_impl(self, node);
+
         let was = self.in_test_context;
         if item_is_test_scoped(&node.attrs) {
             self.in_test_context = true;
         }
         syn::visit::visit_item_impl(self, node);
         self.in_test_context = was;
+    }
+
+    fn visit_item_struct(&mut self, node: &'ast syn::ItemStruct) {
+        rules::required_struct_attrs::check_struct(self, node);
+        syn::visit::visit_item_struct(self, node);
     }
 
     fn visit_item_mod(&mut self, node: &'ast syn::ItemMod) {
@@ -194,6 +201,11 @@ impl<'ast, 'a, 'v> Visit<'ast> for Visitor<'a, 'v> {
     fn visit_macro(&mut self, node: &'ast syn::Macro) {
         rules::forbidden_macros::check(self, node);
         syn::visit::visit_macro(self, node);
+    }
+
+    fn visit_expr_await(&mut self, node: &'ast syn::ExprAwait) {
+        rules::n_plus_one::check_await(self, node);
+        syn::visit::visit_expr_await(self, node);
     }
 
     fn visit_expr_method_call(&mut self, node: &'ast syn::ExprMethodCall) {
