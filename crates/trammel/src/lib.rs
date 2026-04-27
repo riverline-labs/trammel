@@ -3,3 +3,6 @@
 
 pub mod config;
 pub mod glob;
+pub mod layers;
+pub mod violations;
+pub mod visitor;
