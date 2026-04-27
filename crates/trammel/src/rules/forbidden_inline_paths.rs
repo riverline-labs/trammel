@@ -10,25 +10,24 @@ use crate::violations::Violation;
 use crate::visitor::Visitor;
 
 pub fn check_expr(visitor: &mut Visitor, node: &syn::ExprPath) {
-    let path_str = path_string::of(&node.path);
-    let line = node
-        .path
-        .segments
-        .first()
-        .map(|s| s.ident.span().start().line)
-        .unwrap_or(0);
-    check_inner(visitor, &path_str, line, Position::Expr);
+    check_path_at(visitor, &node.path, Position::Expr);
 }
 
 pub fn check_type(visitor: &mut Visitor, node: &syn::TypePath) {
-    let path_str = path_string::of(&node.path);
-    let line = node
-        .path
+    check_path_at(visitor, &node.path, Position::Type);
+}
+
+/// Generic dispatch: any callsite that has a `syn::Path` and knows its
+/// position can route here. Used by `visit_expr_struct` (struct literals
+/// like `crate::db::User { ... }`) since those don't go through `ExprPath`.
+pub fn check_path_at(visitor: &mut Visitor, path: &syn::Path, site: Position) {
+    let path_str = path_string::of(path);
+    let line = path
         .segments
         .first()
         .map(|s| s.ident.span().start().line)
         .unwrap_or(0);
-    check_inner(visitor, &path_str, line, Position::Type);
+    check_inner(visitor, &path_str, line, site);
 }
 
 fn check_inner(visitor: &mut Visitor, path_str: &str, line: usize, site: Position) {

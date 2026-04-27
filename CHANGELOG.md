@@ -5,6 +5,18 @@ follows [keep-a-changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.1] – 2026-04-27
+
+### Fixed
+- `forbidden_inline_paths` now catches struct-literal paths (e.g.
+  `crate::db::User { name: "x" }`). Previously these lived on
+  `ExprStruct.path` (a raw `syn::Path`) and were missed by the
+  `visit_expr_path` dispatch. The visitor now also overrides
+  `visit_expr_struct` to dispatch the path at expression position.
+- Test-context propagation now recognizes any attribute whose path's
+  *final segment* is `test` — covers `#[tokio::test]`,
+  `#[async_std::test]`, `#[sqlx::test]`, etc., not just bare `#[test]`.
+
 ## [0.1.0] – 2026-04-27
 
 ### Added

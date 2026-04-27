@@ -263,6 +263,45 @@ fn forbidden_inline_paths_test_context_is_exempt() {
     );
 }
 
+#[test]
+fn forbidden_inline_paths_struct_literal_in_expr_position_fires() {
+    // v0.1.1: struct literal paths live on ExprStruct.path (raw syn::Path),
+    // not ExprPath. Verify the visit_expr_struct dispatch catches them.
+    let v = check(
+        TRANSPORTS_NO_DB_TOML,
+        "transports/web/router.rs",
+        r#"
+        fn handler() {
+            let _ = crate::db::User { name: "x" };
+        }
+        "#,
+    );
+    assert!(
+        v.iter().any(|x| x.rule == "TRANSPORTS_NO_DB"),
+        "struct literal path should fire: {v:?}"
+    );
+}
+
+#[test]
+fn forbidden_inline_paths_tokio_test_attribute_propagates_test_context() {
+    // v0.1.1: #[tokio::test] / #[async_std::test] now count as test context
+    // (any attribute whose final path segment is `test`).
+    let v = check(
+        TRANSPORTS_NO_DB_TOML,
+        "transports/web/router.rs",
+        r#"
+        #[tokio::test]
+        async fn t() {
+            let _ = db::User { name: "x" };
+        }
+        "#,
+    );
+    assert!(
+        v.is_empty(),
+        "#[tokio::test] should propagate test context: {v:?}"
+    );
+}
+
 // ── forbidden_macros ─────────────────────────────────────────────────────────
 
 const NO_SQL_OUTSIDE_DB_TOML: &str = r#"

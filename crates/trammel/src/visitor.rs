@@ -91,10 +91,18 @@ impl<'a, 'v> Visitor<'a, 'v> {
     }
 }
 
-/// `#[test]`, `#[cfg(test)]`, or `#[cfg(any(test, ...))]` on the item.
+/// `#[test]`, `#[cfg(test)]`, `#[cfg(any(test, ...))]`, or any attribute
+/// whose path's *final segment* is `test` — catches `#[tokio::test]`,
+/// `#[async_std::test]`, etc., not just bare `#[test]`.
 fn item_is_test_scoped(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| {
-        if attr.path().is_ident("test") {
+        let last_is_test = attr
+            .path()
+            .segments
+            .last()
+            .map(|s| s.ident == "test")
+            .unwrap_or(false);
+        if last_is_test {
             return true;
         }
         if attr.path().is_ident("cfg") {
@@ -196,6 +204,17 @@ impl<'ast, 'a, 'v> Visit<'ast> for Visitor<'a, 'v> {
     fn visit_type_path(&mut self, node: &'ast syn::TypePath) {
         rules::forbidden_inline_paths::check_type(self, node);
         syn::visit::visit_type_path(self, node);
+    }
+
+    fn visit_expr_struct(&mut self, node: &'ast syn::ExprStruct) {
+        // `crate::db::User { ... }` literals carry a raw `syn::Path` that
+        // never reaches `visit_expr_path`. Dispatch the path at expr position.
+        rules::forbidden_inline_paths::check_path_at(
+            self,
+            &node.path,
+            crate::config::Position::Expr,
+        );
+        syn::visit::visit_expr_struct(self, node);
     }
 
     fn visit_macro(&mut self, node: &'ast syn::Macro) {
