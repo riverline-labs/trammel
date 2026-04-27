@@ -51,9 +51,39 @@ Output on violations preserves a consistent shape:
 trammel: FAILED — 2 violations found.
 ```
 
+## Pre-push hook
+
+Wire `trammel` into `.git/hooks/pre-push` to fail the push if conformance
+breaks:
+
+```sh
+#!/usr/bin/env bash
+set -euo pipefail
+trammel check
+```
+
+Or in a `Makefile`:
+
+```make
+.PHONY: trammel verify
+trammel: ## architecture conformance — hard push gate
+	trammel check
+verify: fmt-check trammel build clippy test
+```
+
+GitHub Actions:
+
+```yaml
+- name: install trammel
+  run: cargo install --locked trammel --version "^0.1"
+- name: trammel check
+  run: trammel check
+```
+
 ## Configuration
 
-Single file, `trammel.toml`, at the project root.
+Single file, `trammel.toml`, at the project root. A fully annotated reference
+config lives at [`examples/trammel.toml`](examples/trammel.toml).
 
 ### Top level
 
