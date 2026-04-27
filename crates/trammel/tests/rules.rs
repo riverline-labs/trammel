@@ -694,3 +694,72 @@ fn n_plus_one_nested_fn_does_not_count_toward_outer_loop() {
     // The outer loop has no await on a db expr, so still no violation.
     assert!(v.is_empty(), "{v:?}");
 }
+
+#[test]
+fn n_plus_one_post_await_iterator_chain_clean() {
+    // The `.await` lexically PRECEDES `.map(...)` in the method chain — the
+    // map iterates over the awaited Vec, it does not surround the await.
+    // Each request issues exactly one round-trip. NOT an N+1; must not fire.
+    let v = check(
+        N_PLUS_ONE_TOML,
+        "app/foo.rs",
+        r#"
+        async fn search(term: &str) {
+            let _items: Vec<_> = db::search::all(term)
+                .await
+                .into_iter()
+                .map(|h| h.id)
+                .collect();
+        }
+        "#,
+    );
+    assert!(
+        v.is_empty(),
+        "post-await iterator chain should not be flagged: {v:?}"
+    );
+}
+
+#[test]
+fn n_plus_one_combinator_map_with_await_inside_closure_fires() {
+    // True positive: the await is INSIDE the closure passed to `.map`, so it
+    // executes per-element. Mirrors the existing `then` test for the `map`
+    // combinator to lock in the fix's boundary.
+    let v = check(
+        N_PLUS_ONE_TOML,
+        "app/foo.rs",
+        r#"
+        async fn fan(ids: Vec<u32>) {
+            let _ = ids
+                .into_iter()
+                .map(|id| async move { db::user::get(id).await });
+        }
+        "#,
+    );
+    assert!(
+        v.iter().any(|x| x.rule == "N_PLUS_ONE"),
+        "await inside .map closure must still fire: {v:?}"
+    );
+}
+
+#[test]
+fn n_plus_one_post_await_chain_inside_loop_still_fires() {
+    // The post-await `.map(...)` shape must not silence a true N+1 when the
+    // whole chain is itself inside a `for` loop. Outer loop bumps depth to 1;
+    // the await on a db path inside that loop must still flag.
+    let v = check(
+        N_PLUS_ONE_TOML,
+        "app/foo.rs",
+        r#"
+        async fn loop_with_post_await_chain(terms: Vec<String>) {
+            for term in terms {
+                let _items: Vec<_> = db::search::all(&term)
+                    .await
+                    .into_iter()
+                    .map(|h| h.id)
+                    .collect();
+            }
+        }
+        "#,
+    );
+    assert_eq!(rules_in(&v), vec!["N_PLUS_ONE"]);
+}

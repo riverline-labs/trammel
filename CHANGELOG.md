@@ -5,6 +5,21 @@ follows [keep-a-changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.2] – 2026-04-27
+
+### Fixed
+- `n_plus_one` no longer false-positives when an iterator combinator
+  (`.map`, `.then`, `for_each`, …) is *chained after* the `.await`.
+  Previously the visitor incremented `loop_depth` for the entire method
+  call — receiver included — so a non-iterating shape like
+  `db::fetch().await.into_iter().map(|h| h.id).collect()` was flagged
+  as N+1 even though the combinator only post-processes the awaited
+  `Vec`. The receiver of a combinator is now walked at the outer
+  `loop_depth`; only its arguments (the closures that actually iterate)
+  see the bumped depth. True N+1 shapes — `.await` lexically *inside*
+  the combinator's closure or inside an enclosing `for` / `while` /
+  `loop` — continue to fire.
+
 ## [0.1.1] – 2026-04-27
 
 ### Fixed

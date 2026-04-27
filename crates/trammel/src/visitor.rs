@@ -7,12 +7,16 @@
 //! - `in_test_context` — initialized from the layer's `implicit_test_context`,
 //!   then OR'd by `#[test]` / `#[cfg(test)]` / `#[cfg(any(test, ...))]` on
 //!   enclosing `fn` / `impl` / `mod` items, save/restore on exit.
-//! - `loop_depth` — incremented on `for` / `while` / `loop` and on iterator
-//!   combinator method calls (configured via `n_plus_one.combinators`).
-//!   Saved and reset to 0 on entry to a nested `fn` (the closure or async fn
-//!   defined inside a loop body executes its body separately, not on each
-//!   outer iteration), restored on exit. Not reset on `impl` items because
-//!   `impl` blocks contain item declarations, not executable scope.
+//! - `loop_depth` — incremented on `for` / `while` / `loop` and while
+//!   visiting the *arguments* of an iterator combinator method call
+//!   (configured via `n_plus_one.combinators`). The combinator's *receiver*
+//!   is walked at the outer depth — it is the upstream chain, evaluated
+//!   once before iteration begins, so a `.await` inside the receiver
+//!   (e.g. `db::fetch().await.into_iter().map(...)`) is not a per-element
+//!   await. Saved and reset to 0 on entry to a nested `fn` (the closure or
+//!   async fn defined inside a loop body executes its body separately, not
+//!   on each outer iteration), restored on exit. Not reset on `impl` items
+//!   because `impl` blocks contain item declarations, not executable scope.
 //! - `n_plus_one_suppressed` — set when the enclosing `fn` carries the
 //!   configured `n_plus_one.opt_out_attribute` (matched against the *final
 //!   segment* so both `#[allow_n_plus_one]` and
@@ -230,11 +234,25 @@ impl<'ast, 'a, 'v> Visit<'ast> for Visitor<'a, 'v> {
     fn visit_expr_method_call(&mut self, node: &'ast syn::ExprMethodCall) {
         rules::forbidden_methods::check(self, node);
 
+        // Walk the receiver at the OUTER loop_depth — it is the upstream
+        // chain, evaluated once before this combinator iterates. Only the
+        // arguments (typically a closure) execute per element.
+        for attr in &node.attrs {
+            self.visit_attribute(attr);
+        }
+        self.visit_expr(&node.receiver);
+        self.visit_ident(&node.method);
+        if let Some(tf) = &node.turbofish {
+            self.visit_angle_bracketed_generic_arguments(tf);
+        }
+
         let combinator = self.is_combinator(&node.method.to_string());
         if combinator {
             self.loop_depth += 1;
         }
-        syn::visit::visit_expr_method_call(self, node);
+        for arg in &node.args {
+            self.visit_expr(arg);
+        }
         if combinator {
             self.loop_depth -= 1;
         }
@@ -329,11 +347,24 @@ rule = "N_PLUS_ONE"
             self.inner.loop_depth -= 1;
         }
         fn visit_expr_method_call(&mut self, node: &'ast syn::ExprMethodCall) {
+            // Mirror the real visitor: receiver at outer depth, args at
+            // bumped depth (when this is a combinator).
+            for attr in &node.attrs {
+                self.visit_attribute(attr);
+            }
+            self.visit_expr(&node.receiver);
+            self.visit_ident(&node.method);
+            if let Some(tf) = &node.turbofish {
+                self.visit_angle_bracketed_generic_arguments(tf);
+            }
+
             let combinator = self.inner.is_combinator(&node.method.to_string());
             if combinator {
                 self.inner.loop_depth += 1;
             }
-            syn::visit::visit_expr_method_call(self, node);
+            for arg in &node.args {
+                self.visit_expr(arg);
+            }
             if combinator {
                 self.inner.loop_depth -= 1;
             }
@@ -439,6 +470,39 @@ rule = "N_PLUS_ONE"
         assert!(
             inside.2 >= 1,
             "for_each should bump depth, got {}",
+            inside.2
+        );
+    }
+
+    #[test]
+    fn combinator_receiver_does_not_increment_depth() {
+        // The receiver of a combinator is the upstream chain — evaluated
+        // once before iteration. Idents within the receiver expression must
+        // be visited at the OUTER loop_depth, not the bumped one.
+        let snaps = drive(
+            r#"
+            fn outer() {
+                fetch_data(in_receiver).for_each(|x| {
+                    let inside_combinator = ();
+                });
+            }
+            "#,
+        );
+        let receiver_ident = snaps
+            .iter()
+            .find(|(n, _, _, _)| n == "in_receiver")
+            .unwrap();
+        let inside = snaps
+            .iter()
+            .find(|(n, _, _, _)| n == "inside_combinator")
+            .unwrap();
+        assert_eq!(
+            receiver_ident.2, 0,
+            "receiver of for_each must be at outer depth"
+        );
+        assert!(
+            inside.2 >= 1,
+            "for_each closure body must still bump depth, got {}",
             inside.2
         );
     }
