@@ -29,8 +29,8 @@ trammel-attrs = "0.1"
 
 ## Configure
 
-Create `trammel.toml` at your project root. See
-`docs/2026-04-27-trammel-design.md` for the full schema.
+Create `trammel.toml` at your project root. The full schema lives in this
+README under [Configuration](#configuration) (filled in as features land).
 
 ## Run
 
