@@ -29,8 +29,8 @@ trammel-attrs = "0.1"
 
 ## Configure
 
-Create `trammel.toml` at your project root. The full schema lives in this
-README under [Configuration](#configuration) (filled in as features land).
+Create `trammel.toml` at your project root. Schema documentation will land
+in this README as the rule kinds are implemented.
 
 ## Run
 
