@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = ["crates/trammel", "crates/trammel-attrs"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.83"
+license = "Apache-2.0"
+repository = "https://github.com/riverline-labs/trammel"
+homepage = "https://github.com/riverline-labs/trammel"
+authors = ["Riverline Labs LLC"]
+
+[workspace.dependencies]
+syn = { version = "2", features = ["full", "visit", "extra-traits"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+quote = "1"
+walkdir = "2"
+globset = "0.4"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
