@@ -28,12 +28,15 @@ use syn::visit::Visit;
 
 use crate::config::{Config, Layer};
 use crate::layers::LayerSet;
+use crate::rules::{self, CompiledRules};
 use crate::violations::Violation;
 
 /// Entry point: traverse one parsed file and append any violations found.
+#[allow(clippy::too_many_arguments)]
 pub fn check_file<'a>(
     cfg: &'a Config,
     layer_set: &'a LayerSet<'a>,
+    compiled: &'a CompiledRules,
     path: &'a Path,
     rel_path: &'a str,
     layer: &'a Layer,
@@ -46,6 +49,7 @@ pub fn check_file<'a>(
     let mut visitor = Visitor {
         cfg,
         layer_set,
+        compiled,
         layer,
         path,
         rel_path,
@@ -60,6 +64,7 @@ pub fn check_file<'a>(
 pub struct Visitor<'a, 'v> {
     pub cfg: &'a Config,
     pub layer_set: &'a LayerSet<'a>,
+    pub compiled: &'a CompiledRules,
     pub layer: &'a Layer,
     pub path: &'a Path,
     pub rel_path: &'a str,
@@ -113,6 +118,11 @@ fn has_attr_named(attrs: &[syn::Attribute], name: &str) -> bool {
 }
 
 impl<'ast, 'a, 'v> Visit<'ast> for Visitor<'a, 'v> {
+    fn visit_item_use(&mut self, node: &'ast syn::ItemUse) {
+        rules::forbidden_imports::check(self, node);
+        syn::visit::visit_item_use(self, node);
+    }
+
     fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
         let was_test = self.in_test_context;
         let was_suppressed = self.n_plus_one_suppressed;
@@ -171,7 +181,24 @@ impl<'ast, 'a, 'v> Visit<'ast> for Visitor<'a, 'v> {
         self.loop_depth -= 1;
     }
 
+    fn visit_expr_path(&mut self, node: &'ast syn::ExprPath) {
+        rules::forbidden_inline_paths::check_expr(self, node);
+        syn::visit::visit_expr_path(self, node);
+    }
+
+    fn visit_type_path(&mut self, node: &'ast syn::TypePath) {
+        rules::forbidden_inline_paths::check_type(self, node);
+        syn::visit::visit_type_path(self, node);
+    }
+
+    fn visit_macro(&mut self, node: &'ast syn::Macro) {
+        rules::forbidden_macros::check(self, node);
+        syn::visit::visit_macro(self, node);
+    }
+
     fn visit_expr_method_call(&mut self, node: &'ast syn::ExprMethodCall) {
+        rules::forbidden_methods::check(self, node);
+
         let combinator = self.is_combinator(&node.method.to_string());
         if combinator {
             self.loop_depth += 1;
@@ -285,6 +312,7 @@ rule = "N_PLUS_ONE"
     fn drive(src: &str) -> Vec<(String, bool, usize, bool)> {
         let cfg = make_cfg();
         let layer_set = LayerSet::build(&cfg).unwrap();
+        let compiled = CompiledRules::build(&cfg).unwrap();
         let layer = &cfg.layers[0];
         let path = PathBuf::from("app/test.rs");
         let mut violations = Vec::new();
@@ -292,6 +320,7 @@ rule = "N_PLUS_ONE"
         let inner = Visitor {
             cfg: &cfg,
             layer_set: &layer_set,
+            compiled: &compiled,
             layer,
             path: &path,
             rel_path: "app/test.rs",

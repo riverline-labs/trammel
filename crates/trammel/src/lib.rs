@@ -4,5 +4,6 @@
 pub mod config;
 pub mod glob;
 pub mod layers;
+pub mod rules;
 pub mod violations;
 pub mod visitor;
