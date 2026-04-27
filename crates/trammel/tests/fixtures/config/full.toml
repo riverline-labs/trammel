@@ -1,0 +1,110 @@
+src_root = "src"
+
+[[layers]]
+name = "app"
+paths = ["app/**"]
+
+[[layers]]
+name = "system"
+paths = ["system/**"]
+exempt_files = ["system/connectors/db.rs"]
+
+[[layers]]
+name = "transports_web"
+paths = ["transports/web/**"]
+exempt_files = ["transports/web/middleware.rs"]
+
+[[layers]]
+name = "transports_cli"
+paths = ["transports/cli/**"]
+
+[[layers]]
+name = "db"
+paths = ["db/**"]
+
+[[layers]]
+name = "tests"
+paths = ["tests.rs", "tests/**"]
+implicit_test_context = true
+
+[[forbidden_imports]]
+in_layers = ["app"]
+patterns = ["axum*", "*transports*", "sqlx*"]
+rule = "APP_BOUNDARY"
+message = "app/ must not import {pattern}"
+
+[[forbidden_inline_paths]]
+in_layers = ["transports_web", "transports_cli"]
+patterns = ["db", "db::*", "crate::db*", "sqlx", "sqlx::*"]
+position = "any"
+rule = "TRANSPORTS_NO_DB"
+allow_in_test_context = true
+
+[[forbidden_inline_paths]]
+in_files = ["src/transports/web/router.rs"]
+patterns = ["app::*"]
+position = "expr"
+rule = "ROUTER_NO_APP"
+
+[[forbidden_macros]]
+in_layers = ["app", "system", "transports_web", "transports_cli"]
+qualified_names = ["sqlx::*"]
+bare_names = ["query", "query_as", "query_scalar", "query_unchecked"]
+bare_names_in_layers = ["app", "system"]
+rule = "NO_SQL_OUTSIDE_DB"
+allow_in_test_context = true
+
+[[forbidden_methods]]
+in_layers = ["app", "system", "db", "transports_web", "transports_cli"]
+methods = ["unwrap", "expect"]
+allow_in_test_context = true
+rule = "NO_UNWRAP_IN_PRODUCTION"
+
+[[required_struct_attrs]]
+in_layers = ["system"]
+struct_name_pattern = "Stub*"
+required_any_of = [
+  "cfg(test)",
+  'cfg(any(test, feature = "testing"))',
+]
+also_apply_to_impls = true
+rule = "STUBS_MUST_BE_GATED"
+
+[[fs_must_exist]]
+path = "src/lib.rs"
+rule = "LIB_IS_FILE"
+message = "library root must be src/lib.rs"
+
+[[fs_must_not_exist]]
+paths = [
+  "src/lib",
+  "src/app_state.rs",
+  "src/adapters",
+  "src/transports/extractors",
+]
+rule = "FORBIDDEN_PATHS"
+
+[[file_content_scan]]
+glob = "src/transports/web/templates/**"
+forbidden_substrings = ["session.persona"]
+rule = "TEMPLATE_NO_PERSONA_CHECK"
+
+[[file_content_scan]]
+glob = "src/transports/**/*.rs"
+exclude_glob = "src/transports/web/templates/**"
+forbidden_substrings = [".is_admin()"]
+rule = "TRANSPORT_NO_IS_ADMIN"
+
+[n_plus_one]
+in_layers = ["app", "db"]
+db_path_patterns = ["db", "db::*", "crate::db*", "sqlx", "sqlx::*"]
+db_macros = ["query", "query_as", "query_scalar", "query_unchecked"]
+combinators = [
+  "map", "for_each", "for_each_concurrent", "then", "and_then",
+  "filter_map", "flat_map", "fold",
+  "try_for_each", "try_for_each_concurrent", "try_fold",
+  "inspect",
+]
+opt_out_attribute = "allow_n_plus_one"
+layer_assumes_query = ["db"]
+rule = "N_PLUS_ONE"
