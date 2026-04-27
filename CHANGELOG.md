@@ -5,6 +5,19 @@ follows [keep-a-changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.3] – 2026-04-27
+
+### Fixed
+- The `n_plus_one` opt-out attribute (e.g.
+  `#[trammel_attrs::allow_n_plus_one]`) now suppresses violations when
+  applied to **impl methods** and **trait methods with a default body**,
+  not just freestanding `fn` items. Previously the visitor only
+  overrode `visit_item_fn` for the propagation, so an annotation on
+  `impl Foo { #[allow_n_plus_one] async fn bar() { ... } }` was
+  silently ignored — the attribute compiled but did nothing. Now
+  `visit_impl_item_fn` and `visit_trait_item_fn` apply the same opt-out,
+  test-context, and `loop_depth` reset propagation as `visit_item_fn`.
+
 ## [0.1.2] – 2026-04-27
 
 ### Fixed

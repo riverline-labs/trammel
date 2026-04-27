@@ -742,6 +742,76 @@ fn n_plus_one_combinator_map_with_await_inside_closure_fires() {
 }
 
 #[test]
+fn n_plus_one_opt_out_on_impl_method_suppresses() {
+    // The opt-out attribute must work on impl methods, not just freestanding
+    // fns. Real-world breakage: north-star's
+    // CustomerPricingDocumentData::load.
+    let v = check(
+        N_PLUS_ONE_TOML,
+        "app/foo.rs",
+        r#"
+        struct Foo;
+        impl Foo {
+            #[allow_n_plus_one]
+            async fn fanout(ids: Vec<u32>) {
+                for id in ids {
+                    let _ = db::user::get(id).await;
+                }
+            }
+        }
+        "#,
+    );
+    assert!(
+        v.is_empty(),
+        "opt-out on impl method should suppress: {v:?}"
+    );
+}
+
+#[test]
+fn n_plus_one_opt_out_on_trait_method_with_default_body_suppresses() {
+    // Same gap shape on trait methods with a default body.
+    let v = check(
+        N_PLUS_ONE_TOML,
+        "app/foo.rs",
+        r#"
+        trait Fanner {
+            #[allow_n_plus_one]
+            async fn fanout(&self, ids: Vec<u32>) {
+                for id in ids {
+                    let _ = db::user::get(id).await;
+                }
+            }
+        }
+        "#,
+    );
+    assert!(
+        v.is_empty(),
+        "opt-out on trait method with default body should suppress: {v:?}"
+    );
+}
+
+#[test]
+fn n_plus_one_impl_method_without_opt_out_still_fires() {
+    // Locks the boundary: the impl-method handling must still flag when the
+    // attribute is absent.
+    let v = check(
+        N_PLUS_ONE_TOML,
+        "app/foo.rs",
+        r#"
+        struct Foo;
+        impl Foo {
+            async fn fanout(ids: Vec<u32>) {
+                for id in ids {
+                    let _ = db::user::get(id).await;
+                }
+            }
+        }
+        "#,
+    );
+    assert_eq!(rules_in(&v), vec!["N_PLUS_ONE"]);
+}
+
+#[test]
 fn n_plus_one_post_await_chain_inside_loop_still_fires() {
     // The post-await `.map(...)` shape must not silence a true N+1 when the
     // whole chain is itself inside a `for` loop. Outer loop bumps depth to 1;

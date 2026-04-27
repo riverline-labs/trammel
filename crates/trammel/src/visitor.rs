@@ -157,6 +157,50 @@ impl<'ast, 'a, 'v> Visit<'ast> for Visitor<'a, 'v> {
         self.n_plus_one_suppressed = was_suppressed;
     }
 
+    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
+        let was_test = self.in_test_context;
+        let was_suppressed = self.n_plus_one_suppressed;
+        let saved_depth = self.loop_depth;
+
+        if item_is_test_scoped(&node.attrs) {
+            self.in_test_context = true;
+        }
+        if let Some(opt_out) = self.opt_out_name() {
+            if has_attr_named(&node.attrs, opt_out) {
+                self.n_plus_one_suppressed = true;
+            }
+        }
+
+        self.loop_depth = 0;
+        syn::visit::visit_impl_item_fn(self, node);
+        self.loop_depth = saved_depth;
+
+        self.in_test_context = was_test;
+        self.n_plus_one_suppressed = was_suppressed;
+    }
+
+    fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
+        let was_test = self.in_test_context;
+        let was_suppressed = self.n_plus_one_suppressed;
+        let saved_depth = self.loop_depth;
+
+        if item_is_test_scoped(&node.attrs) {
+            self.in_test_context = true;
+        }
+        if let Some(opt_out) = self.opt_out_name() {
+            if has_attr_named(&node.attrs, opt_out) {
+                self.n_plus_one_suppressed = true;
+            }
+        }
+
+        self.loop_depth = 0;
+        syn::visit::visit_trait_item_fn(self, node);
+        self.loop_depth = saved_depth;
+
+        self.in_test_context = was_test;
+        self.n_plus_one_suppressed = was_suppressed;
+    }
+
     fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
         rules::required_struct_attrs::check_impl(self, node);
 
