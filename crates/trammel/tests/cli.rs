@@ -120,7 +120,10 @@ fn check_json_carries_violation_objects() {
     let s = String::from_utf8(out).expect("utf8");
     let parsed: Value = serde_json::from_str(s.trim()).expect("parses");
     let arr = parsed.as_array().expect("array");
-    assert!(arr.len() >= 2, "expected at least 2 violations, got {arr:?}");
+    assert!(
+        arr.len() >= 2,
+        "expected at least 2 violations, got {arr:?}"
+    );
 
     let rules: Vec<&str> = arr
         .iter()

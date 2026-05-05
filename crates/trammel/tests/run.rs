@@ -159,7 +159,11 @@ in_layers = ["app"]
 patterns = ["axum*"]
 rule = "APP_NO_AXUM"
 "#;
-    write(dir.path(), "src/app/legacy.rs", "use axum::http::StatusCode;\n");
+    write(
+        dir.path(),
+        "src/app/legacy.rs",
+        "use axum::http::StatusCode;\n",
+    );
     write(dir.path(), "src/app/clean.rs", "fn x() {}\n");
     let cfg: Config = toml::from_str(toml).unwrap();
     let v = run(&cfg, dir.path()).unwrap();

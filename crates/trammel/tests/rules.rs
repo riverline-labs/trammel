@@ -1311,7 +1311,10 @@ rule = "N_PLUS_ONE"
         }
         "#,
     );
-    assert!(v.is_empty(), "layer outside in_layers must be silent: {v:?}");
+    assert!(
+        v.is_empty(),
+        "layer outside in_layers must be silent: {v:?}"
+    );
 }
 
 #[test]
@@ -1369,7 +1372,10 @@ paths = ["app/**"]
         }
         "#,
     );
-    assert!(v.is_empty(), "missing n_plus_one table must be silent: {v:?}");
+    assert!(
+        v.is_empty(),
+        "missing n_plus_one table must be silent: {v:?}"
+    );
 }
 
 #[test]

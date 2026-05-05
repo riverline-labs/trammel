@@ -220,7 +220,10 @@ rule = "BAD_EXCLUDE"
     );
     let mut v = Vec::new();
     let err = file_content_scan::check(&cfg, dir.path(), &mut v).unwrap_err();
-    assert!(format!("{err:#}").contains("invalid exclude_glob"), "{err:#}");
+    assert!(
+        format!("{err:#}").contains("invalid exclude_glob"),
+        "{err:#}"
+    );
 }
 
 #[test]
@@ -241,7 +244,10 @@ rule = "ANY"
     );
     let mut v = Vec::new();
     file_content_scan::check(&cfg, dir.path(), &mut v).expect("scan must not error");
-    assert!(v.is_empty(), "binary file must not produce violations: {v:?}");
+    assert!(
+        v.is_empty(),
+        "binary file must not produce violations: {v:?}"
+    );
 }
 
 #[test]
