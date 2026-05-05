@@ -168,6 +168,102 @@ rule = "TRANSPORT_NO_IS_ADMIN"
 }
 
 #[test]
+fn file_content_scan_exclude_glob_skips_matching_file() {
+    // Same dir matches both include AND exclude — exclude wins, no violation.
+    let dir = tempfile::tempdir().unwrap();
+    write(
+        dir.path(),
+        "src/transports/web/templates/skip.html",
+        ".is_admin()",
+    );
+    let cfg = parse(
+        r#"
+[[file_content_scan]]
+glob = "src/transports/**"
+exclude_glob = "src/transports/web/templates/**"
+forbidden_substrings = [".is_admin()"]
+rule = "TRANSPORT_NO_IS_ADMIN"
+"#,
+    );
+    let mut v = Vec::new();
+    file_content_scan::check(&cfg, dir.path(), &mut v).unwrap();
+    assert!(v.is_empty(), "exclude_glob should skip: {v:?}");
+}
+
+#[test]
+fn file_content_scan_invalid_glob_returns_err() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = parse(
+        r#"
+[[file_content_scan]]
+glob = "[unclosed"
+forbidden_substrings = ["whatever"]
+rule = "BAD_GLOB"
+"#,
+    );
+    let mut v = Vec::new();
+    let err = file_content_scan::check(&cfg, dir.path(), &mut v).unwrap_err();
+    assert!(format!("{err:#}").contains("invalid glob"), "{err:#}");
+}
+
+#[test]
+fn file_content_scan_invalid_exclude_glob_returns_err() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = parse(
+        r#"
+[[file_content_scan]]
+glob = "src/**"
+exclude_glob = "[unclosed"
+forbidden_substrings = ["whatever"]
+rule = "BAD_EXCLUDE"
+"#,
+    );
+    let mut v = Vec::new();
+    let err = file_content_scan::check(&cfg, dir.path(), &mut v).unwrap_err();
+    assert!(format!("{err:#}").contains("invalid exclude_glob"), "{err:#}");
+}
+
+#[test]
+fn file_content_scan_skips_non_utf8_files_silently() {
+    // A binary blob in a glob-matched file must not panic and must not
+    // produce a false-match — read_to_string returns Err, we continue.
+    let dir = tempfile::tempdir().unwrap();
+    let abs = dir.path().join("src/data/blob.bin");
+    fs::create_dir_all(abs.parent().unwrap()).unwrap();
+    fs::write(&abs, [0xFFu8, 0xFE, 0x00, 0x80, 0x90]).unwrap();
+    let cfg = parse(
+        r#"
+[[file_content_scan]]
+glob = "src/data/**"
+forbidden_substrings = ["literally anything"]
+rule = "ANY"
+"#,
+    );
+    let mut v = Vec::new();
+    file_content_scan::check(&cfg, dir.path(), &mut v).expect("scan must not error");
+    assert!(v.is_empty(), "binary file must not produce violations: {v:?}");
+}
+
+#[test]
+fn file_content_scan_substitutes_message_placeholders() {
+    let dir = tempfile::tempdir().unwrap();
+    write(dir.path(), "src/x.rs", "BAD_TOKEN here\n");
+    let cfg = parse(
+        r#"
+[[file_content_scan]]
+glob = "src/**/*.rs"
+forbidden_substrings = ["BAD_TOKEN"]
+rule = "BAD_TOKEN"
+message = "found `{substring}` in `{path}`"
+"#,
+    );
+    let mut v = Vec::new();
+    file_content_scan::check(&cfg, dir.path(), &mut v).unwrap();
+    assert_eq!(v.len(), 1);
+    assert_eq!(v[0].message, "found `BAD_TOKEN` in `src/x.rs`");
+}
+
+#[test]
 fn file_content_scan_no_match_clean() {
     let dir = tempfile::tempdir().unwrap();
     write(

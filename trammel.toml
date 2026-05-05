@@ -1,0 +1,82 @@
+# trammel's own conformance — dogfood the tool against itself.
+#
+# Workspace has two crates; trammel-attrs is a single-file no-op proc-macro
+# and isn't worth a separate config. We classify the trammel crate's modules
+# into intent-based layers and assert the leaf-ness of `config/` and `glob/`.
+
+src_root = "crates/trammel/src"
+
+# ── Layers ───────────────────────────────────────────────────────────────────
+
+[[layers]]
+name = "config"
+paths = ["config/**"]
+
+[[layers]]
+name = "rules"
+paths = ["rules/**"]
+
+[[layers]]
+name = "glob"
+paths = ["glob/**"]
+
+# Top-level orchestration files: lib.rs re-exports; main.rs is the CLI;
+# layers.rs / visitor.rs / violations.rs are the engine plumbing.
+[[layers]]
+name = "core"
+paths = ["lib.rs", "main.rs", "layers.rs", "visitor.rs", "violations.rs"]
+
+# ── fs_layout ────────────────────────────────────────────────────────────────
+
+[[fs_must_exist]]
+path = "crates/trammel/src/lib.rs"
+rule = "LIB_IS_FILE"
+message = "library root must be crates/trammel/src/lib.rs"
+
+# ── forbidden_imports ────────────────────────────────────────────────────────
+# `config/` parses TOML and validates — it must not depend on the engine.
+
+[[forbidden_imports]]
+in_layers = ["config"]
+patterns = [
+  "crate::rules*",
+  "crate::visitor*",
+  "crate::layers*",
+  "crate::violations*",
+]
+rule = "CONFIG_IS_LEAF"
+message = "config/ imports `{pattern}` — config/ must remain a parser/validator leaf, not depend on the engine."
+
+# `glob/` is pure pattern-matching infrastructure used by rules and layers.
+# It must not depend on anything else inside the crate.
+[[forbidden_imports]]
+in_layers = ["glob"]
+patterns = [
+  "crate::rules*",
+  "crate::visitor*",
+  "crate::layers*",
+  "crate::violations*",
+  "crate::config*",
+]
+rule = "GLOB_IS_LEAF"
+message = "glob/ imports `{pattern}` — glob/ is pure infrastructure with no upward dependencies."
+
+# ── forbidden_macros ─────────────────────────────────────────────────────────
+# Production code must not panic via the panic-class macros. Tests can.
+
+[[forbidden_macros]]
+in_layers = ["config", "rules", "glob", "core"]
+bare_names = ["panic", "todo", "unimplemented", "unreachable"]
+bare_names_in_layers = ["config", "rules", "glob", "core"]
+allow_in_test_context = true
+rule = "NO_PANIC_IN_PRODUCTION"
+message = "`{macro}!` is forbidden in production code. Return a Result variant or thread an error."
+
+# ── forbidden_methods ────────────────────────────────────────────────────────
+
+[[forbidden_methods]]
+in_layers = ["config", "rules", "glob", "core"]
+methods = ["unwrap", "expect"]
+allow_in_test_context = true
+rule = "NO_UNWRAP_IN_PRODUCTION"
+message = "`.{method}()` is forbidden in production code. Use `?` or explicit handling."

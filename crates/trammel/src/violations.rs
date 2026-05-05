@@ -4,7 +4,9 @@
 use std::fmt::Write;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone)]
+use serde::Serialize;
+
+#[derive(Debug, Clone, Serialize)]
 pub struct Violation {
     pub file: PathBuf,
     pub line: usize,
@@ -43,6 +45,13 @@ pub fn render(violations: &[Violation]) -> String {
     out
 }
 
+/// Machine-readable JSON: a single array, one object per violation. Stable
+/// keys (`file`, `line`, `rule`, `message`) so downstream tools can pin a
+/// schema. Empty input renders `[]`.
+pub fn render_json(violations: &[Violation]) -> Result<String, serde_json::Error> {
+    serde_json::to_string_pretty(violations)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -50,6 +59,26 @@ mod tests {
     #[test]
     fn empty_renders_ok() {
         assert_eq!(render(&[]), "trammel: OK — no violations found.\n");
+    }
+
+    #[test]
+    fn json_empty_is_array_literal() {
+        assert_eq!(render_json(&[]).expect("renders"), "[]");
+    }
+
+    #[test]
+    fn json_carries_stable_keys() {
+        let v = vec![Violation {
+            file: PathBuf::from("src/app/foo.rs"),
+            line: 14,
+            rule: "APP_NO_AXUM".into(),
+            message: "imports axum".into(),
+        }];
+        let json = render_json(&v).expect("renders");
+        assert!(json.contains("\"rule\": \"APP_NO_AXUM\""));
+        assert!(json.contains("\"line\": 14"));
+        assert!(json.contains("\"file\": \"src/app/foo.rs\""));
+        assert!(json.contains("\"message\": \"imports axum\""));
     }
 
     #[test]

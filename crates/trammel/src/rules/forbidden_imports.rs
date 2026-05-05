@@ -18,6 +18,7 @@ pub fn check(visitor: &mut Visitor, node: &syn::ItemUse) {
         let scope_files = &visitor.compiled.forbidden_imports[idx];
         if !scope_applies(
             &rule.in_layers,
+            &rule.in_layers_except,
             scope_files,
             visitor.layer,
             visitor.rel_path,

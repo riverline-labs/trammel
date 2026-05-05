@@ -76,6 +76,26 @@ patterns = ["app::*"]
 position = "expr"
 rule = "ROUTER_NO_APP"
 
+# ── forbidden_constructors ───────────────────────────────────────────────────
+# Same engine as forbidden_inline_paths; the alternate name reads better
+# for "this constructor / associated call may only run in one layer".
+#
+# `in_layers_except` is the inverse of `in_layers`: the rule applies to every
+# layer EXCEPT those listed. Adding a new layer (e.g. `wasm`) automatically
+# extends the rule's reach — no per-rule edit. Mutually exclusive with
+# `in_layers` on a single entry.
+
+[[forbidden_constructors]]
+in_layers_except = ["system"]   # "system" is this project's side-effect leaf
+patterns = [
+  "Utc::now", "Local::now", "SystemTime::now", "Instant::now",
+  "Uuid::new_v4", "Uuid::now_v7",
+]
+position = "any"
+allow_in_test_context = true
+rule = "DETERMINISM_LEAF"
+message = "Time/id construction `{path}` outside system/. Inject via state."
+
 # ── forbidden_macros ─────────────────────────────────────────────────────────
 # `qualified_names` matches the full `::`-joined macro path.
 # `bare_names` is exact-match on the final segment, scoped by

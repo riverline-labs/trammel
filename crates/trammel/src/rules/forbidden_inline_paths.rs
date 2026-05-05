@@ -32,10 +32,37 @@ pub fn check_path_at(visitor: &mut Visitor, path: &syn::Path, site: Position) {
 
 fn check_inner(visitor: &mut Visitor, path_str: &str, line: usize, site: Position) {
     let cfg = visitor.cfg;
-    for (idx, rule) in cfg.forbidden_inline_paths.iter().enumerate() {
-        let scope_files = &visitor.compiled.forbidden_inline_paths[idx];
+    check_against(
+        visitor,
+        path_str,
+        line,
+        site,
+        &cfg.forbidden_inline_paths,
+        &visitor.compiled.forbidden_inline_paths,
+    );
+    check_against(
+        visitor,
+        path_str,
+        line,
+        site,
+        &cfg.forbidden_constructors,
+        &visitor.compiled.forbidden_constructors,
+    );
+}
+
+fn check_against(
+    visitor: &mut Visitor,
+    path_str: &str,
+    line: usize,
+    site: Position,
+    rules: &[crate::config::ForbiddenInlinePaths],
+    compiled: &[globset::GlobSet],
+) {
+    for (idx, rule) in rules.iter().enumerate() {
+        let scope_files = &compiled[idx];
         if !scope_applies(
             &rule.in_layers,
+            &rule.in_layers_except,
             scope_files,
             visitor.layer,
             visitor.rel_path,

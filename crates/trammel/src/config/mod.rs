@@ -46,41 +46,81 @@ pub fn validate(cfg: &Config) -> Result<()> {
         Ok(())
     };
 
-    let require_scope = |in_layers: &[String], in_files: &[String], rule: &str| -> Result<()> {
-        if in_layers.is_empty() && in_files.is_empty() {
+    let require_scope = |in_layers: &[String],
+                         in_layers_except: &[String],
+                         in_files: &[String],
+                         rule: &str|
+     -> Result<()> {
+        if in_layers.is_empty() && in_layers_except.is_empty() && in_files.is_empty() {
             return Err(anyhow!(
-                "rule `{rule}` must declare at least one of `in_layers` or `in_files`"
+                "rule `{rule}` must declare at least one of `in_layers`, `in_layers_except`, or `in_files`"
+            ));
+        }
+        if !in_layers.is_empty() && !in_layers_except.is_empty() {
+            return Err(anyhow!(
+                "rule `{rule}` declares both `in_layers` and `in_layers_except`; pick one"
             ));
         }
         Ok(())
     };
 
     for r in &cfg.forbidden_imports {
-        require_scope(&r.in_layers, &r.in_files, &r.rule)?;
+        require_scope(&r.in_layers, &r.in_layers_except, &r.in_files, &r.rule)?;
         check_layer_names(&r.in_layers, &format!("forbidden_imports `{}`", r.rule))?;
+        check_layer_names(
+            &r.in_layers_except,
+            &format!("forbidden_imports `{}` in_layers_except", r.rule),
+        )?;
     }
     for r in &cfg.forbidden_inline_paths {
-        require_scope(&r.in_layers, &r.in_files, &r.rule)?;
+        require_scope(&r.in_layers, &r.in_layers_except, &r.in_files, &r.rule)?;
         check_layer_names(
             &r.in_layers,
             &format!("forbidden_inline_paths `{}`", r.rule),
         )?;
+        check_layer_names(
+            &r.in_layers_except,
+            &format!("forbidden_inline_paths `{}` in_layers_except", r.rule),
+        )?;
+    }
+    for r in &cfg.forbidden_constructors {
+        require_scope(&r.in_layers, &r.in_layers_except, &r.in_files, &r.rule)?;
+        check_layer_names(
+            &r.in_layers,
+            &format!("forbidden_constructors `{}`", r.rule),
+        )?;
+        check_layer_names(
+            &r.in_layers_except,
+            &format!("forbidden_constructors `{}` in_layers_except", r.rule),
+        )?;
     }
     for r in &cfg.forbidden_macros {
-        require_scope(&r.in_layers, &r.in_files, &r.rule)?;
+        require_scope(&r.in_layers, &r.in_layers_except, &r.in_files, &r.rule)?;
         check_layer_names(&r.in_layers, &format!("forbidden_macros `{}`", r.rule))?;
+        check_layer_names(
+            &r.in_layers_except,
+            &format!("forbidden_macros `{}` in_layers_except", r.rule),
+        )?;
         check_layer_names(
             &r.bare_names_in_layers,
             &format!("forbidden_macros `{}` bare_names_in_layers", r.rule),
         )?;
     }
     for r in &cfg.forbidden_methods {
-        require_scope(&r.in_layers, &r.in_files, &r.rule)?;
+        require_scope(&r.in_layers, &r.in_layers_except, &r.in_files, &r.rule)?;
         check_layer_names(&r.in_layers, &format!("forbidden_methods `{}`", r.rule))?;
+        check_layer_names(
+            &r.in_layers_except,
+            &format!("forbidden_methods `{}` in_layers_except", r.rule),
+        )?;
     }
     for r in &cfg.required_struct_attrs {
-        require_scope(&r.in_layers, &r.in_files, &r.rule)?;
+        require_scope(&r.in_layers, &r.in_layers_except, &r.in_files, &r.rule)?;
         check_layer_names(&r.in_layers, &format!("required_struct_attrs `{}`", r.rule))?;
+        check_layer_names(
+            &r.in_layers_except,
+            &format!("required_struct_attrs `{}` in_layers_except", r.rule),
+        )?;
         ident::validate(&r.struct_name_pattern).with_context(|| {
             format!(
                 "required_struct_attrs `{}` has invalid struct_name_pattern",
@@ -210,6 +250,69 @@ rule = "BAD"
         );
         let err = validate(&cfg).unwrap_err();
         assert!(err.to_string().contains("BAD"));
+    }
+
+    #[test]
+    fn rejects_in_layers_and_in_layers_except_together() {
+        let cfg = parse(
+            r#"
+[[layers]]
+name = "app"
+paths = ["app/**"]
+
+[[layers]]
+name = "world"
+paths = ["world/**"]
+
+[[forbidden_imports]]
+in_layers = ["app"]
+in_layers_except = ["world"]
+patterns = ["sqlx*"]
+rule = "BOTH"
+"#,
+        );
+        let err = validate(&cfg).unwrap_err();
+        assert!(err.to_string().contains("BOTH"));
+        assert!(err.to_string().contains("in_layers_except"));
+    }
+
+    #[test]
+    fn rejects_unknown_layer_in_in_layers_except() {
+        let cfg = parse(
+            r#"
+[[layers]]
+name = "app"
+paths = ["app/**"]
+
+[[forbidden_imports]]
+in_layers_except = ["does_not_exist"]
+patterns = ["sqlx*"]
+rule = "BAD"
+"#,
+        );
+        let err = validate(&cfg).unwrap_err();
+        assert!(err.to_string().contains("does_not_exist"));
+    }
+
+    #[test]
+    fn accepts_in_layers_except_alone() {
+        let cfg = parse(
+            r#"
+[[layers]]
+name = "app"
+paths = ["app/**"]
+
+[[layers]]
+name = "world"
+paths = ["world/**"]
+
+[[forbidden_imports]]
+in_layers_except = ["world"]
+patterns = ["sqlx*"]
+rule = "OK"
+"#,
+        );
+        validate(&cfg).expect("in_layers_except alone is valid scope");
     }
 
     #[test]

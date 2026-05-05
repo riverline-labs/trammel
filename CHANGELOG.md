@@ -5,6 +5,32 @@ follows [keep-a-changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.0] – 2026-05-05
+
+### Added
+- `in_layers_except` — inverse layer scope on `forbidden_imports`,
+  `forbidden_inline_paths`, `forbidden_constructors`, `forbidden_macros`,
+  `forbidden_methods`, and `required_struct_attrs`. Lets you say "every
+  layer except these" without enumerating, so adding a new layer doesn't
+  silently weaken determinism rules. Mutually exclusive with `in_layers`
+  on a single entry. At least one of `in_layers`, `in_layers_except`, or
+  `in_files` is still required.
+- `forbidden_constructors` — naming alias for `forbidden_inline_paths`
+  aimed at constructor-style patterns (`Uuid::new_v4`, `Utc::now`,
+  `OsRng::default`). Same engine, separate slot so `trammel rules list`
+  reports the kind authors wrote.
+- `trammel check --json` — machine-readable output of violations as a
+  JSON array with stable keys (`file`, `line`, `rule`, `message`). Empty
+  input renders `[]`. Exit code unchanged.
+- `trammel inspect <file>` — show how a file would be classified
+  (layer, exempt status, test context) and which rule entries apply
+  vs. would skip it. Existence is not checked, so hypothetical paths
+  are valid input.
+- `trammel rules` now accepts `--config`.
+- README cookbook section: right-tool guidance for panic-class macros,
+  determinism leaves, role gates, and `as` casts — based on patterns
+  observed in real configs.
+
 ## [0.1.3] – 2026-04-27
 
 ### Fixed

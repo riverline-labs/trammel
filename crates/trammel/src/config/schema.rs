@@ -21,6 +21,12 @@ pub struct Config {
     #[serde(default)]
     pub forbidden_inline_paths: Vec<ForbiddenInlinePaths>,
 
+    /// Naming alias for `forbidden_inline_paths` aimed at constructor-style
+    /// patterns (`Uuid::new_v4`, `Utc::now`). Same engine; separate slot so
+    /// `trammel rules list` reports the kind authors wrote.
+    #[serde(default)]
+    pub forbidden_constructors: Vec<ForbiddenInlinePaths>,
+
     #[serde(default)]
     pub forbidden_macros: Vec<ForbiddenMacros>,
 
@@ -63,6 +69,8 @@ pub struct ForbiddenImports {
     #[serde(default)]
     pub in_layers: Vec<String>,
     #[serde(default)]
+    pub in_layers_except: Vec<String>,
+    #[serde(default)]
     pub in_files: Vec<String>,
     pub patterns: Vec<String>,
     pub rule: String,
@@ -76,6 +84,8 @@ pub struct ForbiddenImports {
 pub struct ForbiddenInlinePaths {
     #[serde(default)]
     pub in_layers: Vec<String>,
+    #[serde(default)]
+    pub in_layers_except: Vec<String>,
     #[serde(default)]
     pub in_files: Vec<String>,
     pub patterns: Vec<String>,
@@ -102,6 +112,8 @@ pub struct ForbiddenMacros {
     #[serde(default)]
     pub in_layers: Vec<String>,
     #[serde(default)]
+    pub in_layers_except: Vec<String>,
+    #[serde(default)]
     pub in_files: Vec<String>,
     #[serde(default)]
     pub qualified_names: Vec<String>,
@@ -121,6 +133,8 @@ pub struct ForbiddenMethods {
     #[serde(default)]
     pub in_layers: Vec<String>,
     #[serde(default)]
+    pub in_layers_except: Vec<String>,
+    #[serde(default)]
     pub in_files: Vec<String>,
     pub methods: Vec<String>,
     pub rule: String,
@@ -134,6 +148,8 @@ pub struct ForbiddenMethods {
 pub struct RequiredStructAttrs {
     #[serde(default)]
     pub in_layers: Vec<String>,
+    #[serde(default)]
+    pub in_layers_except: Vec<String>,
     #[serde(default)]
     pub in_files: Vec<String>,
     pub struct_name_pattern: String,

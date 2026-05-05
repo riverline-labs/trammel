@@ -33,13 +33,59 @@ trammel-attrs = "0.1"
 trammel check                            # reads ./trammel.toml
 trammel check --config path/to.toml      # alternate config
 trammel check --src custom/src           # override src_root from config
+trammel check --json                     # machine-readable output (see below)
 
 trammel rules                            # alias for `rules list`
 trammel rules list                       # enumerate active rules
 trammel rules explain RULE_NAME          # print a rule's message + scope
+
+trammel inspect path/to/file.rs          # show classified layer + applicable rules
 ```
 
 Exit codes: `0` clean, `1` violations, `2` config or IO error.
+
+### `--json`
+
+`trammel check --json` writes a JSON array of violations to stdout
+instead of the human report. Keys are stable (`file`, `line`, `rule`,
+`message`); the exit code is unchanged. Useful for CI annotators,
+editor plugins, and code-review bots:
+
+```json
+[
+  {
+    "file": "src/app/foo.rs",
+    "line": 14,
+    "rule": "APP_NO_AXUM",
+    "message": "app/ imports axum (`use axum::http`)."
+  }
+]
+```
+
+Empty input renders `[]`.
+
+### `trammel inspect <file>`
+
+Show how trammel would classify a file and which rules would consider
+it. Useful when configs grow and you're asking "why isn't rule X firing
+on this file?". Existence is not checked — you can inspect hypothetical
+paths.
+
+```
+$ trammel inspect src/app/foo.rs
+file: app/foo.rs
+layer: app
+exempt: no
+test_context: no (per-fn `#[test]` / `#[cfg(test)]` may still apply)
+
+rules that apply (3):
+  forbidden_imports/APP_NO_AXUM
+  forbidden_imports/APP_NO_TRANSPORTS
+  forbidden_methods/NO_UNWRAP_IN_PRODUCTION
+
+rules that do NOT apply (1):
+  forbidden_imports/GLOB_IS_LEAF
+```
 
 Output on violations preserves a consistent shape:
 
@@ -129,12 +175,19 @@ with `allow_in_test_context = true` skip violations in that context.
 
 ### Scoping
 
-Most rule entries scope to layers (`in_layers = […]`) or to specific files
-(`in_files = […]` — filesystem globs relative to `src_root`). Every rule
-entry that supports scoping must declare at least one of `in_layers` or
-`in_files`; omitting both is a config error. The exceptions are
-`fs_must_exist`, `fs_must_not_exist`, and `file_content_scan`, which scope
-by path glob directly.
+Most rule entries scope to layers (`in_layers = […]`), to specific files
+(`in_files = […]` — filesystem globs relative to `src_root`), or as
+"every layer except these" (`in_layers_except = […]`). Every rule entry
+that supports scoping must declare at least one of those three; omitting
+all three is a config error. The exceptions are `fs_must_exist`,
+`fs_must_not_exist`, and `file_content_scan`, which scope by path glob
+directly.
+
+`in_layers_except` and `in_layers` are mutually exclusive on a single
+rule entry — pick one. Use `in_layers_except` when adding a new layer
+should automatically extend the rule's reach (e.g. "constructor X is
+allowed only in `world/`"); use `in_layers` when a rule is genuinely
+about a specific set of layers.
 
 ### Rule kinds
 
@@ -172,6 +225,26 @@ patterns = ["app::*"]
 position = "expr"
 rule = "ROUTER_NO_APP"
 ```
+
+#### `forbidden_constructors`
+
+A naming alias for `forbidden_inline_paths` aimed at constructor- and
+associated-call patterns like `Uuid::new_v4`, `Utc::now`, or
+`OsRng::default`. Same engine, same fields; it exists so configs that are
+constraining "where can these be called?" read more naturally.
+
+```toml
+[[forbidden_constructors]]
+in_layers_except = ["world"]
+patterns = ["Utc::now", "Local::now", "SystemTime::now", "Instant::now"]
+position = "any"
+allow_in_test_context = true
+rule = "CLOCK_ONLY_IN_WORLD"
+message = "Time access `{path}` outside world/. Inject Clock via state."
+```
+
+`trammel rules list` reports the kind as `forbidden_constructors` for
+entries declared this way.
 
 #### `forbidden_macros`
 
@@ -339,6 +412,106 @@ for `fs_must_*`).
 **Identifier patterns** — used in `required_struct_attrs.struct_name_pattern`.
 `*` matches any sequence of characters within an identifier. `**` is rejected
 as a config error. Bare names are exact-match.
+
+## Cookbook
+
+Real configs converge on a handful of recurring constraints. The right
+rule kind matters: substring scans are easy to reach for but lose line
+precision and AST-aware test exclusion. The mappings below come from
+encoding live projects.
+
+### Forbid `panic!` / `todo!` / `unimplemented!` / `unreachable!`
+
+Use `forbidden_macros` with bare names — line-precise and AST-aware, so
+`#[cfg(test)] mod tests` is exempt automatically.
+
+```toml
+[[forbidden_macros]]
+in_layers = ["app", "system", "transports", "data"]
+bare_names = ["panic", "todo", "unimplemented", "unreachable"]
+bare_names_in_layers = ["app", "system", "transports", "data"]
+allow_in_test_context = true
+rule = "NO_PANIC_IN_PRODUCTION"
+message = "`{macro}!` is forbidden in production code."
+```
+
+Avoid `file_content_scan` for this — it loses the line number and the
+test-context exemption.
+
+### Determinism leaf (clock / RNG / id generation only in one layer)
+
+Use `forbidden_constructors` (or `forbidden_inline_paths`) with
+`in_layers_except`. Adding a new layer doesn't widen the loophole.
+
+```toml
+[[forbidden_constructors]]
+in_layers_except = ["world"]
+patterns = [
+  "Utc::now", "Local::now", "SystemTime::now", "Instant::now",
+  "Uuid::new_v4", "Uuid::now_v7",
+  "OsRng", "thread_rng",
+]
+position = "any"
+allow_in_test_context = true
+rule = "DETERMINISM_LEAF"
+message = "`{path}` outside world/. Inject Clock/IdGen/Rand via state."
+```
+
+### Forbid role/permission method gates at the API edge
+
+Use `forbidden_methods` for the method-call shapes; reach for
+`file_content_scan` only for the residual non-method shapes (`session.role
+==`, `matches!(role, ...)`).
+
+```toml
+[[forbidden_methods]]
+in_layers = ["transports_web", "transports_cli"]
+methods = ["is_admin", "is_editor", "is_reviewer"]
+rule = "API_NO_ROLE_GATE"
+message = "Don't branch on role in transports/. Compute actions in app/."
+
+[[file_content_scan]]
+glob = "src/transports/**/*.rs"
+forbidden_substrings = ["session.role ==", "matches!(role,", "matches!(*role,"]
+rule = "API_NO_ROLE_BRANCH"
+message = "Don't pattern-match role in transports/. Compute actions in app/."
+```
+
+### Forbid `as` casts that bypass parsers
+
+These need a substring scan today — `ExprCast` doesn't have a dedicated
+rule kind yet:
+
+```toml
+[[file_content_scan]]
+glob = "src/{app,system,transports,data}/**/*.rs"
+forbidden_substrings = [" as unknown ", " as dyn "]
+rule = "NO_UNSAFE_AS_CAST"
+message = "Forbidden `as` cast pattern. Use From/TryFrom or a registered parser."
+```
+
+### When to reach for `file_content_scan`
+
+Use it when the constraint is genuinely textual (templates, embedded
+SQL, comment markers) or when no AST shape captures the pattern (the
+`as` cast above). Don't use it for things `forbidden_macros`,
+`forbidden_methods`, or `forbidden_inline_paths` already cover —
+substring scans report `line: 0` and run on the entire file (no
+test-context exemption, no per-`fn` opt-out).
+
+## Development
+
+```sh
+cargo test                                     # run the full suite
+cargo install cargo-llvm-cov --locked          # one-time
+cargo llvm-cov --summary-only                  # coverage table
+cargo llvm-cov --html && open target/llvm-cov/html/index.html
+```
+
+trammel dogfoods itself: the workspace `trammel.toml` enforces leaf
+status on `crates/trammel/src/config/` and `crates/trammel/src/glob/`,
+plus `NO_PANIC_IN_PRODUCTION` and `NO_UNWRAP_IN_PRODUCTION`. Run
+`trammel check` from the workspace root before pushing.
 
 ## License
 

@@ -140,6 +140,36 @@ fn fail_project_aggregates_violations_across_passes() {
 }
 
 #[test]
+fn exempt_files_are_skipped_even_when_content_would_fire() {
+    // visitor::check_file early-returns on layer_set.is_exempt — without
+    // this test, that branch was unexercised (the inspect short-circuit
+    // fires earlier and never reaches the visitor).
+    let dir = tempfile::tempdir().unwrap();
+    write(dir.path(), "src/lib.rs", "");
+    let toml = r#"
+src_root = "src"
+
+[[layers]]
+name = "app"
+paths = ["app/**"]
+exempt_files = ["app/legacy.rs"]
+
+[[forbidden_imports]]
+in_layers = ["app"]
+patterns = ["axum*"]
+rule = "APP_NO_AXUM"
+"#;
+    write(dir.path(), "src/app/legacy.rs", "use axum::http::StatusCode;\n");
+    write(dir.path(), "src/app/clean.rs", "fn x() {}\n");
+    let cfg: Config = toml::from_str(toml).unwrap();
+    let v = run(&cfg, dir.path()).unwrap();
+    assert!(
+        v.iter().all(|x| x.rule != "APP_NO_AXUM"),
+        "exempt file must not be visited: {v:?}"
+    );
+}
+
+#[test]
 fn skips_files_outside_any_layer() {
     let dir = tempfile::tempdir().unwrap();
     write(dir.path(), "src/lib.rs", "");

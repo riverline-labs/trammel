@@ -19,6 +19,7 @@ pub fn check_struct(visitor: &mut Visitor, node: &syn::ItemStruct) {
         let scope_files = &visitor.compiled.required_struct_attrs[idx];
         if !scope_applies(
             &rule.in_layers,
+            &rule.in_layers_except,
             scope_files,
             visitor.layer,
             visitor.rel_path,
@@ -59,6 +60,7 @@ pub fn check_impl(visitor: &mut Visitor, node: &syn::ItemImpl) {
         let scope_files = &visitor.compiled.required_struct_attrs[idx];
         if !scope_applies(
             &rule.in_layers,
+            &rule.in_layers_except,
             scope_files,
             visitor.layer,
             visitor.rel_path,

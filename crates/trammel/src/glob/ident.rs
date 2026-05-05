@@ -64,6 +64,18 @@ mod tests {
     }
 
     #[test]
+    fn identifier_globs_prefix_suffix_combinations() {
+        // Suffix mismatch even though prefix matches.
+        assert!(!matches("Foo*Bar", "FooBaz"));
+        // Prefix+suffix overlap such that the wildcard region has zero
+        // remaining width — must reject.
+        assert!(!matches("ab*ba", "aba"));
+        // Multi-chunk pattern: at least one middle chunk must be located.
+        assert!(matches("Foo*Bar*Baz", "FooXBarYBaz"));
+        assert!(!matches("Foo*Bar*Baz", "FooXBzzYBaz"));
+    }
+
+    #[test]
     fn validate_rejects_double_star() {
         assert!(validate("Stub*").is_ok());
         assert!(validate("*Stub").is_ok());

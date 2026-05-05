@@ -28,6 +28,7 @@ pub fn check(visitor: &mut Visitor, node: &syn::Macro) {
         let scope_files = &visitor.compiled.forbidden_macros[idx];
         if !scope_applies(
             &rule.in_layers,
+            &rule.in_layers_except,
             scope_files,
             visitor.layer,
             visitor.rel_path,
